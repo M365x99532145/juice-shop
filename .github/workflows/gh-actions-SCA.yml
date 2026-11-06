@@ -1,0 +1,42 @@
+name: Software composition analysis (SCA)
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  Build_Publish_Stage:
+    runs-on: ubuntu-latest
+    name: Build, Publish, and Stage
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        env:
+          NODE_ENV: development
+          NPM_CONFIG_PRODUCTION: "false"
+        run: npm install --include=dev
+
+      - name: Build application
+        run: npm run build
+
+      - name: Install CycloneDX
+        run: npm install --global @cyclonedx/cyclonedx-npm
+
+      - name: Generate SBOM
+        run: cyclonedx-npm --output-file bom.xml --output-format XML
+
+      - name: Upload BOM to Dependency-Track
+        run: |
+          curl -v -X POST "https://dependency-track-devsecops-669358591.azurewebsites.net/api/v1/bom" \
+            -H "X-API-Key: ${{ secrets.DTRACKAPIKEY }}" \
+            -F "project=${{ secrets.DTRACKPROJID }}" \
+            -F "projectName=DevSecOps" \
+            -F "bom=@${{ github.workspace }}/bom.xml"
+        continue-on-error: true
